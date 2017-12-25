@@ -1,13 +1,13 @@
 import numpy as np
 import tensorflow as tf
 import random
-from dataloader import Gen_Data_loader, Dis_dataloader
-from generator import Generator
-from discriminator import Discriminator
-from rollout import ROLLOUT
-from target_lstm import TARGET_LSTM
-import cPickle
-
+from SeqGAN.dataloader import Gen_Data_loader, Dis_dataloader
+from SeqGAN.generator import Generator
+from SeqGAN.discriminator import Discriminator
+from SeqGAN.rollout import ROLLOUT
+from SeqGAN.target_lstm import TARGET_LSTM
+# import cPickle
+import pickle
 #########################################################################################
 #  Generator  Hyper-parameters
 ######################################################################################
@@ -38,6 +38,13 @@ negative_file = 'save/generator_sample.txt'
 eval_file = 'save/eval_file.txt'
 generated_num = 10000
 
+def xrange(x):
+    """
+    define xrange
+    :param x:
+    :return:
+    """
+    return iter(range(x))
 
 def generate_samples(sess, trainable_model, batch_size, generated_num, output_file):
     # Generate Samples
@@ -89,7 +96,15 @@ def main():
     dis_data_loader = Dis_dataloader(BATCH_SIZE)
 
     generator = Generator(vocab_size, BATCH_SIZE, EMB_DIM, HIDDEN_DIM, SEQ_LENGTH, START_TOKEN)
-    target_params = cPickle.load(open('save/target_params.pkl'))
+    # f1 = open('save/target_params_py3.pkl', 'rb')
+    # target_params = pickle.load(f1)
+    # exit(0)
+    target_params = pickle.load(open('save/target_params_py3.pkl' , mode="rb"))
+    # # print(target_params)
+    # for i in target_params:
+    #     print(i)
+    #     print(len(i))
+    # exit(0)
     target_lstm = TARGET_LSTM(vocab_size, BATCH_SIZE, EMB_DIM, HIDDEN_DIM, SEQ_LENGTH, START_TOKEN, target_params) # The oracle model
 
     discriminator = Discriminator(sequence_length=20, num_classes=2, vocab_size=vocab_size, embedding_size=dis_embedding_dim, 
@@ -106,7 +121,7 @@ def main():
 
     log = open('save/experiment-log.txt', 'w')
     #  pre-train generator
-    print 'Start pre-training...'
+    print('Start pre-training...')
     log.write('pre-training...\n')
     for epoch in xrange(PRE_EPOCH_NUM):
         loss = pre_train_epoch(sess, generator, gen_data_loader)
@@ -114,11 +129,11 @@ def main():
             generate_samples(sess, generator, BATCH_SIZE, generated_num, eval_file)
             likelihood_data_loader.create_batches(eval_file)
             test_loss = target_loss(sess, target_lstm, likelihood_data_loader)
-            print 'pre-train epoch ', epoch, 'test_loss ', test_loss
+            print('pre-train epoch ', epoch, 'test_loss ', test_loss)
             buffer = 'epoch:\t'+ str(epoch) + '\tnll:\t' + str(test_loss) + '\n'
             log.write(buffer)
 
-    print 'Start pre-training discriminator...'
+    print('Start pre-training discriminator...')
     # Train 3 epoch on the generated data and do this for 50 times
     for _ in range(50):
         generate_samples(sess, generator, BATCH_SIZE, generated_num, negative_file)
@@ -136,8 +151,8 @@ def main():
 
     rollout = ROLLOUT(generator, 0.8)
 
-    print '#########################################################################'
-    print 'Start Adversarial Training...'
+    print ('#########################################################################')
+    print('Start Adversarial Training...')
     log.write('adversarial training...\n')
     for total_batch in range(TOTAL_BATCH):
         # Train the generator for one step
@@ -153,7 +168,7 @@ def main():
             likelihood_data_loader.create_batches(eval_file)
             test_loss = target_loss(sess, target_lstm, likelihood_data_loader)
             buffer = 'epoch:\t' + str(total_batch) + '\tnll:\t' + str(test_loss) + '\n'
-            print 'total_batch: ', total_batch, 'test_loss: ', test_loss
+            print('total_batch: ', total_batch, 'test_loss: ', test_loss)
             log.write(buffer)
 
         # Update roll-out parameters
@@ -174,7 +189,6 @@ def main():
                         discriminator.dropout_keep_prob: dis_dropout_keep_prob
                     }
                     _ = sess.run(discriminator.train_op, feed)
-
     log.close()
 
 
