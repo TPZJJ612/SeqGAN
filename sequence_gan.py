@@ -1,11 +1,11 @@
 import numpy as np
 import tensorflow as tf
 import random
-from SeqGAN.dataloader import Gen_Data_loader, Dis_dataloader
-from SeqGAN.generator import Generator
-from SeqGAN.discriminator import Discriminator
-from SeqGAN.rollout import ROLLOUT
-from SeqGAN.target_lstm import TARGET_LSTM
+from SeqGAN1.dataloader import Gen_Data_loader, Dis_dataloader
+from SeqGAN1.generator import Generator
+from SeqGAN1.discriminator import Discriminator
+from SeqGAN1.rollout import ROLLOUT
+from SeqGAN1.target_lstm import TARGET_LSTM
 # import cPickle
 import pickle
 #########################################################################################
@@ -96,15 +96,9 @@ def main():
     dis_data_loader = Dis_dataloader(BATCH_SIZE)
 
     generator = Generator(vocab_size, BATCH_SIZE, EMB_DIM, HIDDEN_DIM, SEQ_LENGTH, START_TOKEN)
-    # f1 = open('save/target_params_py3.pkl', 'rb')
-    # target_params = pickle.load(f1)
-    # exit(0)
+
     target_params = pickle.load(open('save/target_params_py3.pkl' , mode="rb"))
-    # # print(target_params)
-    # for i in target_params:
-    #     print(i)
-    #     print(len(i))
-    # exit(0)
+
     target_lstm = TARGET_LSTM(vocab_size, BATCH_SIZE, EMB_DIM, HIDDEN_DIM, SEQ_LENGTH, START_TOKEN, target_params) # The oracle model
 
     discriminator = Discriminator(sequence_length=20, num_classes=2, vocab_size=vocab_size, embedding_size=dis_embedding_dim, 
@@ -120,10 +114,11 @@ def main():
     gen_data_loader.create_batches(positive_file)
 
     log = open('save/experiment-log.txt', 'w')
-    #  pre-train generator
+    #  pre-train generator (pre-train G(theta) using MLE on S)
     print('Start pre-training...')
     log.write('pre-training...\n')
     for epoch in xrange(PRE_EPOCH_NUM):
+        # 利用真实数据pre-train: pre-train epoch 由PRE_EPOCH_NUM = 120 控制
         loss = pre_train_epoch(sess, generator, gen_data_loader)
         if epoch % 5 == 0:
             generate_samples(sess, generator, BATCH_SIZE, generated_num, eval_file)
@@ -132,11 +127,13 @@ def main():
             print('pre-train epoch ', epoch, 'test_loss ', test_loss)
             buffer = 'epoch:\t'+ str(epoch) + '\tnll:\t' + str(test_loss) + '\n'
             log.write(buffer)
-
+    # pre-train D(theta) via minimizing the cross entropy
     print('Start pre-training discriminator...')
     # Train 3 epoch on the generated data and do this for 50 times
     for _ in range(50):
+        # 利用预训练的模型生产负样本：negative_file
         generate_samples(sess, generator, BATCH_SIZE, generated_num, negative_file)
+        # 负样本数据和正样本数据一起加载到dis_data_loader中
         dis_data_loader.load_train_data(positive_file, negative_file)
         for _ in range(3):
             dis_data_loader.reset_pointer()
@@ -148,9 +145,8 @@ def main():
                     discriminator.dropout_keep_prob: dis_dropout_keep_prob
                 }
                 _ = sess.run(discriminator.train_op, feed)
-
+    # ??????
     rollout = ROLLOUT(generator, 0.8)
-
     print ('#########################################################################')
     print('Start Adversarial Training...')
     log.write('adversarial training...\n')
@@ -170,7 +166,6 @@ def main():
             buffer = 'epoch:\t' + str(total_batch) + '\tnll:\t' + str(test_loss) + '\n'
             print('total_batch: ', total_batch, 'test_loss: ', test_loss)
             log.write(buffer)
-
         # Update roll-out parameters
         rollout.update_params()
 
